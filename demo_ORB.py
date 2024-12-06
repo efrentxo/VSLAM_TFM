@@ -1,8 +1,12 @@
+# Generic libraries
 import cv2
 import numpy as np
 #import matplotlib as plt
 #from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
+
+# Mis funciones
+from my_functions import plot_camera_pyramid
 
 opencv2_plots_raw = 0
 opencv2_plots_keypoints = 0
@@ -127,3 +131,88 @@ plt.title("Inlier Matches (RANSAC) - Keypoints: " + str(len(inlier_matches)))
 plt.axis('off')
 
 plt.show()
+
+threshold_good_match = 50
+good_matches = matches[:threshold_good_match] # Adjust threshold as needed
+
+## Step 4: Compute Essential Matrix
+# Extract matched points
+pts1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches])
+pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
+
+# Camera intrinsic matrix
+fx = 1
+fy = 1
+cx = 1
+cy = 1
+K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])  # Camera intrinsic matrix
+
+# Compute essential matrix
+E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+
+# Recover pose
+_, R, t, _ = cv2.recoverPose(E, pts1, pts2, K)
+
+# Step 5: Compute Camera Locations
+# First camera is at the origin
+R1 = np.eye(3)
+t1 = np.zeros((3, 1))
+
+# Second camera pose
+R2 = R
+t2 = t
+
+# Compute world coordinates of cameras
+cam_location1 = -R1.T @ t1  # First camera
+cam_location2 = -R2.T @ t2  # Second camera
+
+print("Camera Location 1:", cam_location1.ravel())
+print("Camera Location 2:", cam_location2.ravel())
+
+# Step 6: Visualize
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot camera locations
+ax.scatter(cam_location1[0], cam_location1[1], cam_location1[2], c='r', label='Camera 1')
+ax.scatter(cam_location2[0], cam_location2[1], cam_location2[2], c='b', label='Camera 2')
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+plt.legend()
+plt.show()
+
+## Step 5: Triangulate Points
+# Compute projection matrices
+P1 = np.hstack((np.eye(3), np.zeros((3, 1))))  # First camera at origin
+P2 = np.hstack((R, t))  # Second camera with computed rotation and translation
+
+# Triangulate points
+pts4D_homogeneous = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
+
+# Convert to 3D points
+pts3D = pts4D_homogeneous[:3, :] / pts4D_homogeneous[3, :]
+pts3D = pts3D.T
+
+#Step 6: Visualize the 3D Structure
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+ax.scatter(pts3D[:, 0], pts3D[:, 1], pts3D[:, 2], c='b', marker='o')
+ax.scatter(cam_location1[0], cam_location1[1], cam_location1[2], c='r', label='Camera 1')
+ax.scatter(cam_location2[0], cam_location2[1], cam_location2[2], c='r', label='Camera 2')
+
+plot_camera_pyramid(ax, R1, t1, scale=0.5, color='r', label='Camera 1')
+plot_camera_pyramid(ax, R2, t2, scale=0.5, color='r', label='Camera 2')
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+
+plt.show()
+
+
