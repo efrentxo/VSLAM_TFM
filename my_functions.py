@@ -103,3 +103,23 @@ def plot_camera_triangle(ax, R, t, scale=1.0, color='b', label=None):
             [triangle_vertices_world[2, base_indices[i]], triangle_vertices_world[2, base_indices[i + 1]]],
             color=color
         )
+
+def plot_camera_pose(ax, R, t, color='blue', label=None):
+    """
+    Plot a camera pose in 3D.
+
+    Args:
+    - R: Rotation matrix (3x3).
+    - t: Translation vector (3x1).
+    - ax: Matplotlib 3D axis.
+    - color: Color for the camera representation.
+    - label: Label for the camera.
+    """
+    # Camera center in world coordinates
+    C = -R.T @ t
+
+    # Plot camera center
+    ax.scatter(C[0], C[1], C[2], color=color, label=label)
+    ax.quiver(C[0], C[1], C[2], R[0, 0], R[1, 0], R[2, 0], length=0.1, color='red')  # X-axis
+    ax.quiver(C[0], C[1], C[2], R[0, 1], R[1, 1], R[2, 1], length=0.1, color='green')  # Y-axis
+    ax.quiver(C[0], C[1], C[2], R[0, 2], R[1, 2], R[2, 2], length=0.1, color='blue')  # Z-axis

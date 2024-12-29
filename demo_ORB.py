@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Mis funciones
-from my_functions import plot_camera_pyramid
+from my_functions import plot_camera_pyramid, plot_camera_pose, plot_camera_triangle
 
 opencv2_plots_raw = 0
 opencv2_plots_keypoints = 0
@@ -118,11 +118,15 @@ img_matches_all = cv2.drawMatches(img1, keypoints1, img2, keypoints2, matches, N
 inlier_matches = [m for i, m in enumerate(matches) if matchesMask[i] == 1]
 img_matches_inliers = cv2.drawMatches(img1, keypoints1, img2, keypoints2, inlier_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
+# Extract matched points after RANSAC
+pts1_filt = np.float32([keypoints1[m.queryIdx].pt for m in inlier_matches])
+pts2_filt = np.float32([keypoints2[m.trainIdx].pt for m in inlier_matches])
+
 # Plot results
 plt.figure(figsize=(20, 10))
 plt.subplot(1, 2, 1)
 plt.imshow(img_matches_all)
-plt.title("All Matches - Keypoints: " + str(len(img_matches_all)))
+plt.title("All Matches - Keypoints: " + str(len(matches)))
 plt.axis('off')
 
 plt.subplot(1, 2, 2)
@@ -132,8 +136,8 @@ plt.axis('off')
 
 plt.show()
 
-threshold_good_match = 50
-good_matches = matches[:threshold_good_match] # Adjust threshold as needed
+threshold_good_match = 100
+good_matches = inlier_matches[:threshold_good_match] # Adjust threshold as needed
 
 ## Step 4: Compute Essential Matrix
 # Extract matched points
@@ -141,11 +145,14 @@ pts1 = np.float32([keypoints1[m.queryIdx].pt for m in good_matches])
 pts2 = np.float32([keypoints2[m.trainIdx].pt for m in good_matches])
 
 # Camera intrinsic matrix
-fx = 1
-fy = 1
-cx = 1
-cy = 1
-K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])  # Camera intrinsic matrix
+fx = 800   # Focal length: Tuple (fx, fy) representing the focal lengths in pixels.
+fy = 800
+skew = 0 # Skew coefficient (usually 0 for most cameras).
+cx = 640 # Tuple (cx, cy) for the image center in pixels.
+cy = 480 # 640
+K = np.array([[fx, skew, cx],
+              [0 ,   fy, cy],
+              [0 ,    0,  1]])  # Camera intrinsic matrix
 
 # Compute essential matrix
 E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -196,18 +203,19 @@ pts3D = pts4D_homogeneous[:3, :] / pts4D_homogeneous[3, :]
 pts3D = pts3D.T
 
 #Step 6: Visualize the 3D Structure
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
 ax.scatter(pts3D[:, 0], pts3D[:, 1], pts3D[:, 2], c='b', marker='o')
-ax.scatter(cam_location1[0], cam_location1[1], cam_location1[2], c='r', label='Camera 1')
-ax.scatter(cam_location2[0], cam_location2[1], cam_location2[2], c='r', label='Camera 2')
+ax.scatter(cam_location1[0], cam_location1[1], cam_location1[2], c='blue', label='Camera 1')
+ax.scatter(cam_location2[0], cam_location2[1], cam_location2[2], c='blue', label='Camera 2')
 
-plot_camera_pyramid(ax, R1, t1, scale=0.5, color='r', label='Camera 1')
-plot_camera_pyramid(ax, R2, t2, scale=0.5, color='r', label='Camera 2')
+plot_camera_pyramid(ax, R1, t1, scale=0.1, color='r', label='Camera 1')
+plot_camera_pyramid(ax, R2, t2, scale=0.1, color='r', label='Camera 2')
+#
+# plot_camera_pose(ax, R1, t1, color='r', label='Camera 1')
+# plot_camera_pose(ax, R2, t2, color='r', label='Camera 2')
+
 
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
