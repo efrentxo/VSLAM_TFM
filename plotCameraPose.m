@@ -34,10 +34,10 @@ function plotCameraPose(R, t, scale)
     plot3([p0(1) p4(1)], [p0(2) p4(2)], [p0(3) p4(3)], 'k', 'LineWidth', 2);
 
     % Connect frustum base
-    plot3([p1(1) p2(1)], [p1(2) p2(2)], [p1(3) p2(3)], 'b', 'LineWidth', 2);
-    plot3([p2(1) p3(1)], [p2(2) p3(2)], [p2(3) p3(3)], 'b', 'LineWidth', 2);
-    plot3([p3(1) p4(1)], [p3(2) p4(2)], [p3(3) p4(3)], 'b', 'LineWidth', 2);
-    plot3([p4(1) p1(1)], [p4(2) p1(2)], [p4(3) p1(3)], 'b', 'LineWidth', 2);
+    plot3([p1(1) p2(1)], [p1(2) p2(2)], [p1(3) p2(3)], 'g', 'LineWidth', 2);
+    plot3([p2(1) p3(1)], [p2(2) p3(2)], [p2(3) p3(3)], 'g', 'LineWidth', 2);
+    plot3([p3(1) p4(1)], [p3(2) p4(2)], [p3(3) p4(3)], 'g', 'LineWidth', 2);
+    plot3([p4(1) p1(1)], [p4(2) p1(2)], [p4(3) p1(3)], 'g', 'LineWidth', 2);
 
     % Plot coordinate axes at the camera center
     quiver3(t(1), t(2), t(3), R(1,1), R(2,1), R(3,1), scale, 'r', 'LineWidth', 2); % X (Red)
