@@ -1,15 +1,18 @@
 %% Load data
 clc; clear; close all;
 % imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_test/'];
-imageFolder   = ['//home/efren/Escritorio/TFM/datos/Crazyflie_toma1//'];
+% imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_toma2/'];
+imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_toma4/'];
+
 % imageFolder   = ['//home/efren/Escritorio/TFM/datos/Camara_movil_test2//'];
 % imageFolder   = ['//home/efren/Escritorio/TFM/datos/Camara_movil_test5//'];
 % 
 imds          = imageDatastore(imageFolder);
 disp(['Imagenes cargadas: ', num2str(numel(imds.Files))])
 
-% crear subfolder para guardar outputs
-NewSubFolder= 'Output';
+% Crear subfolder para guardar outputs
+currentDateTime = datetime('now', 'Format', 'yyyy-MM-dd_HH-mm-ss');
+NewSubFolder= ['Output_',char(currentDateTime)];
 if ~exist(fullfile(imageFolder,NewSubFolder))
     mkdir(fullfile(imageFolder,NewSubFolder));
 end
@@ -17,6 +20,7 @@ pathOutputs = (fullfile(imageFolder,NewSubFolder));
 
 % seleccionar si generar plots para guardar
 CrearPlots = 1;
+mostrar_figuras = 'off';
 
 %% Iniciar mapa 3D
 % leer la primera imagen
@@ -36,6 +40,7 @@ imageSize      = size(currI,[1 2]);  % in units of pixels
 RadialDistorsion  = [cameraParams.RadialDistortion];
 RadialDistorsion  = [0 0 0];
 TangencialDistorsion = cameraParams.TangentialDistortion;
+TangencialDistorsion = [0 0];
 intrinsics     = cameraIntrinsics(focalLength, principalPoint, imageSize, "RadialDistortion",RadialDistorsion, "TangentialDistortion",TangencialDistorsion);
 disp(['Images resolucion: ', num2str(imageSize(1)),'x',num2str(imageSize(2))]);
 disp('Camera settings loaded');
@@ -57,8 +62,10 @@ numLevels   = 8;
 numPoints   = 500;
 [preFeatures, prePoints, preAllPoints] = DetectAndExtractFeatures(currI_corr{currFrameIdx}, scaleFactor, numLevels, numPoints, intrinsics); 
 
+% firstI       = currI; % Preserve the first frame 
+firstI       = currI_corr{currFrameIdx}; % Preserve the first frame corrected
+
 currFrameIdx = currFrameIdx + 1;
-firstI       = currI; % Preserve the first frame 
 
 isMapInitialized  = false;
 
@@ -67,7 +74,7 @@ disp ('Analizando primera imagen...DONE')
 %% Map initialization loop
 while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     disp (['presiona cualquier tecla para continuar...'])
-    pause;
+%     pause;
     currI = readimage(imds, currFrameIdx);
     disp (['Imagen - ',num2str(currFrameIdx),'...'])
 
@@ -143,7 +150,7 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     end
 
     % Triangulate two views to obtain 3-D map points
-    minParallax = 5; % In degrees
+    minParallax = 2; % In degrees
     [isValid, xyzWorldPoints, inlierTriangulationIdx] = helperTriangulateTwoFrames(...
         rigidtform3d, relPose, inlierPrePoints, inlierCurrPoints, intrinsics, minParallax);
     
@@ -161,19 +168,21 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     f1 = figure;
     subplot(211)
     showMatchedFeatures(firstI, currI_corr{currFrameIdx-1}, preMatchedPoints, currMatchedPoints, 'montage');
-    title(['Matches - ',num2str(currMatchedPoints.Count), ' points']);
+    title(['Inicializar-Matches - ',num2str(currMatchedPoints.Count), ' points']);
 
     subplot(212);
     showMatchedFeatures(firstI, currI_corr{currFrameIdx-1}, inlierPrePoints, inlierCurrPoints, 'montage');
-    title(['Inliers - ',num2str(inlierPrePoints.Count), ' points']);
+    title(['Inicializar-Inliers - ',num2str(inlierPrePoints.Count), ' points']);
+    saveas(f1,[pathOutputs,'/Inicializar-MatchesInliersPoints.png']) ;
+    close(f1);
 
     % Get the original index of features in the two key frames
     indexPairs = indexPairs(inlierTriangulationIdx,:);
     
-    % Display Final Inliers check
-    figure;
-    showMatchedFeatures(firstI , currI_corr{currFrameIdx-1} , prePoints(indexPairs(:,1)), currPoints(indexPairs(:,2)), 'blend');
-    title(['Inliers - ',num2str(inlierPrePoints.Count), ' points']);
+%     % Display Final Inliers check
+%     figure;
+%     showMatchedFeatures(firstI , currI_corr{currFrameIdx-1} , prePoints(indexPairs(:,1)), currPoints(indexPairs(:,2)), 'blend');
+%     title(['Inliers - ',num2str(inlierPrePoints.Count), ' points']);
 
     isMapInitialized = true;
 
@@ -248,15 +257,14 @@ mapPointSet = updateRepresentativeView(mapPointSet, newPointIdx, vSetKeyFrames.V
 
 % Visualize matched features in the current frame
 % close(hfeature.Parent.Parent);
-featurePlot   = helperVisualizeMatchedFeatures(currI, currPoints(indexPairs(:,2)));
+% featurePlot   = helperVisualizeMatchedFeatures(currI, currPoints(indexPairs(:,2)));
 
 % Visualize initial map points and camera trajectory
-mapPlot       = helperVisualizeMotionAndStructure(vSetKeyFrames, mapPointSet);
-
+% mapPlot       = helperVisualizeMotionAndStructure(vSetKeyFrames, mapPointSet);
 % Show legend
-showLegend(mapPlot);
+% showLegend(mapPlot);
+
 disp(['Aplicar bundle adjustment...DONE '])
-%% plot 3d inicial
 
 %% Tracking
 % ViewId of the current key frame
@@ -282,23 +290,23 @@ isLastFrameKeyFrame = true;
 % tracker = vision.PointTracker(MaxBidirectionalError = 5);
 % initialize(tracker, currPoints.Location(indexPairs(:,2), :), currI);
 
-while currFrameIdx < numel(imds.Files)  
-    disp(['Imagen iteracion ', num2str(currFrameIdx)])    
+while currFrameIdx <= numel(imds.Files)  
+    disp(['Imagen iteracion ', num2str(currFrameIdx),'/',num2str(numel(imds.Files))])    
     currI = readimage(imds, currFrameIdx);
     % Corregir imagen
     currI_corr{currFrameIdx}  = undistortImage(currI, intrinsics);
     
 %     figure;
 %     imshow(currI_corr{currFrameIdx-1})
-    [currFeatures, currPoints] = DetectAndExtractFeatures(currI_corr{currFrameIdx} , scaleFactor, numLevels, numPoints);
-
-    f1 = figure;
+    [currFeatures, currPoints] = DetectAndExtractFeatures(currI_corr{currFrameIdx} , scaleFactor, numLevels, 500);
+ 
+    f1 = figure('visible',mostrar_figuras);
     [filepath,name,ext] = fileparts(imds.Files(currFrameIdx));
 %     imshow(currI_corr{currFrameIdx-1})
     imshow(currI_corr{currFrameIdx});hold on;
     plot(currPoints,'ShowScale',false, showOrientation=false)
-    title(['All ORB points - ',num2str(currPoints.Count), ' points']);
-    saveas(f1,[pathOutputs,'/All_ORB_points',name,'.png']) ;
+    title(['All ORB - ',num2str(currPoints.Count), ' points - ',name,' - (',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),')'],'Interpreter','None');
+    saveas(f1,[pathOutputs,'/All_ORB_points_',name,'.png']) ;
     close(f1);
 
 
@@ -306,6 +314,11 @@ while currFrameIdx < numel(imds.Files)
     [currPose, mapPointsIdx, featureIdx] = helperTrackLastKeyFrame(...
     mapPointSet, vSetKeyFrames.Views, currFeatures, currPoints, lastKeyFrameId, intrinsics, scaleFactor);
 
+    if isempty(mapPointsIdx) || length(mapPointsIdx)< 6
+        disp('no se han encotrado matches con los 3d points')
+        currFrameIdx = currFrameIdx + 1;
+        continue;
+    end
     % Track the local map and check if the current frame is a key frame.
     % A frame is a key frame if both of the following conditions are satisfied:
     %
@@ -341,7 +354,7 @@ while currFrameIdx < numel(imds.Files)
     end
     
     % second part
-     % Add the new key frame 
+    % Add the new key frame 
     [mapPointSet, vSetKeyFrames] = helperAddNewKeyFrame(mapPointSet, vSetKeyFrames, ...
         currPose, currFeatures, currPoints, mapPointsIdx, featureIdx, localKeyFrameIds);
 
@@ -377,7 +390,7 @@ while currFrameIdx < numel(imds.Files)
     mapPointSet = updateRepresentativeView(mapPointSet, mapPointIdx, vSetKeyFrames.Views);
 
     % Visualize 3D world points and camera trajectory
-    updatePlot(mapPlot, vSetKeyFrames, mapPointSet);
+%     updatePlot(mapPlot, vSetKeyFrames, mapPointSet);
 
     % Set the feature points to be tracked
     [~, index2d] = findWorldPointsInView(mapPointSet, currKeyFrameId);
@@ -403,22 +416,138 @@ while currFrameIdx < numel(imds.Files)
     % Create plots y guardar
     % Inliers
     [filepath,name,ext] = fileparts(imds.Files(currFrameIdx));
-    conn = findConnection(vSetKeyFrames,lastKeyFrameIdx,currFrameIdx);
-    inlierPrePoints = [vSetKeyFrames.Views.Points{lastKeyFrameIdx}.Location(conn.Matches{1}(:,1),1), vSetKeyFrames.Views.Points{lastKeyFrameIdx}.Location(conn.Matches{1}(:,1),2)];
-    inlierCurrPoints = [vSetKeyFrames.Views.Points{currFrameIdx}.Location(conn.Matches{1}(:,1),1), vSetKeyFrames.Views.Points{currFrameIdx}.Location(conn.Matches{1}(:,1),2)];
+    conn = findConnection(vSetKeyFrames, lastKeyFrameIdx, currFrameIdx);
+    ind_prev = conn.Matches{1}(:,1);
+    ind_curr = conn.Matches{1}(:,2);
+    inlierPrePoints  = [vSetKeyFrames.Views.Points{lastKeyFrameIdx}.Location(ind_prev,:)];
+    inlierCurrPoints = [vSetKeyFrames.Views.Points{currFrameIdx}.Location(ind_curr,:)];
 
-    f1 = figure;
-      showMatchedFeatures(currI_corr{currFrameIdx}, currI_corr{lastKeyFrameIdx}, inlierPrePoints, inlierCurrPoints, 'blend');
-    title(['Inliers - ',num2str(length(conn.Matches{1})), ' points']);
-    saveas(f1,[pathOutputs,'/Inliers_montage',name,'.png']) ;
+%     f1 = figure('visible',mostrar_figuras);
+%     showMatchedFeatures(currI_corr{lastKeyFrameIdx}, currI_corr{currFrameIdx}, inlierPrePoints, inlierCurrPoints, 'montage');
+%     title(['Inliers - ',num2str(length(conn.Matches{1})), ' points - ',name,' -(',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),')'],'Interpreter','None');
+%     saveas(f1,[pathOutputs,'/Inliers_montage_',name,'.png']) ;
+%     close(f1);
+
+    f1 = figure('visible',mostrar_figuras);
+    showMatchedFeatures(currI_corr{lastKeyFrameIdx}, currI_corr{currFrameIdx}, inlierPrePoints, inlierCurrPoints, 'blend');
+    title(['Inliers - ',num2str(length(conn.Matches{1})), ' points - ',name,' -(',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),')'],'Interpreter','None');
+    saveas(f1,[pathOutputs,'/Inliers_blend_',name,'.png']) ;
     close(f1);
 
-    f1 = figure;
-    showMatchedFeatures(currI_corr{currFrameIdx}, currI_corr{lastKeyFrameIdx}, inlierPrePoints, inlierCurrPoints, 'blend');
-    title(['Inliers - ',num2str(length(conn.Matches{1})), ' points']);
-    saveas(f1,[pathOutputs,'/Inliers_blend',name,'.png']) ;
-    close(f1);
+    % Check Loop Closure
+    % mathing features - propueta sencilla pero pesada compitacopalmente
+    % hacer el match con el current frama y los features delos frames
+    % pasados
+    for i = 1:vSetKeyFrames.NumViews
+        indexPairs = matchFeatures(binaryFeatures(vSetKeyFrames.Views.Features{i,1}), currFeatures, 'MaxRatio', 0.7);
+        LoopClosure_matches(i) = length(indexPairs);
+        if length(indexPairs) > 20  % Set threshold for loop closure
+            loopClosureDetected = true;
+            matchedFrameIdx = i;
+            disp(['Loop closure detected between current frame...', num2str(matchedFrameIdx)])
+        end
+    end
 
+    % Q&D manual loop closure para chequear como queda el mapa3d
+    id1 = 1; loopCandidates(1) = id1;
+    id2 = 418;
+    % extraer los indicies de los puntos 3d de la imagen actual, y los indices de los
+    % feaures correspondientes 
+    [index3d1, index2d1] = findWorldPointsInView(mapPointSet, id1);
+    allFeatures1   = vSetKeyFrames.Views.Features{id1};
+    validFeatures1  = allFeatures1(index2d1, :);
+   
+    [index3d2, index2d2] = findWorldPointsInView(mapPointSet, id2);
+    allFeatures2   = vSetKeyFrames.Views.Features{id2};
+    validFeatures2 = allFeatures2(index2d2, :);
+
+%     indexPairs = matchFeatures(binaryFeatures(allFeatures1), binaryFeatures(allFeatures2), ...
+%         'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
+
+    indexPairs = matchFeatures(binaryFeatures(validFeatures1), binaryFeatures(validFeatures2), ...
+        'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
+
+    % check
+    [FeaId1, PointsId1] = DetectAndExtractFeatures(currI_corr{1} , scaleFactor, numLevels, 500);
+    [FeaId2, PointsId2] = DetectAndExtractFeatures(currI_corr{id2} , scaleFactor, numLevels, 500);
+    indexPairs = matchFeatures(FeaId1, FeaId2, ...
+        'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
+    clear inliersIdx
+    [E, inliersIdx] = estimateEssentialMatrix(PointsId1(indexPairs(:,1)), PointsId2(indexPairs(:,2)), cameraParams,'MaxNumTrials', 500, 'Confidence', 99.9, 'MaxDistance', 1);
+    
+    Inliers1 = PointsId1(indexPairs(:,1));
+    Inliers1 = Inliers1(inliersIdx);
+    Inliers2 = PointsId2(indexPairs(:,2));
+    Inliers2 = Inliers2(inliersIdx);
+    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, Inliers1, Inliers2, 'montage');
+
+    % chequeo la info guardada, me da lo mismo
+    sum(sum(FeaId1.Features - vSetKeyFrames.Views.Features{loopCandidates(1)}))
+    sum(sum(FeaId2.Features - vSetKeyFrames.Views.Features{418}))
+    sum(sum(FeaId2.Features - currFeatures.Features))
+    % end check
+
+    % mostrar imagenes
+    figure; 
+    imshow(currI_corr{id1});
+    figure; 
+    imshow(currI_corr{id2});
+
+    worldPoints1 = mapPointSet.WorldPoints(index3d1(indexPairs(:, 1)), :);
+    worldPoints2 = mapPointSet.WorldPoints(index3d2(indexPairs(:, 2)), :);
+
+    tform1 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id1));
+    tform2 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id2));
+
+    worldPoints1InCamera1 = transformPointsForward(tform1, worldPoints1) ;
+    worldPoints2InCamera2 = transformPointsForward(tform2, worldPoints2) ;
+
+    w = warning('off','all');
+    [tform, inlierIndex] = estgeotform3d(...
+        worldPoints1InCamera1, worldPoints2InCamera2, 'similarity', 'MaxDistance', 0.1);
+    warning(w);
+
+    f1 = figure('visible','on');
+    points1_location = vSetKeyFrames.Views.Points{id1}.Location(index2d1(indexPairs(:, 1)),:);     
+    points2_location = vSetKeyFrames.Views.Points{id2}.Location(index2d2(indexPairs(:, 2)),:);   
+
+    points1_location_inliers  = points1_location(inlierIndex,:);     
+    points2_location_inliers  = points2_location(inlierIndex,:); 
+
+    figure;
+    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location, points2_location, 'montage');
+    figure;
+    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location_inliers, points2_location_inliers, 'montage');
+  
+    % Add connection between the current key frame and the loop key frame
+    matches = uint32([index2d2(indexPairs(inlierIndex, 2)), index2d1(indexPairs(inlierIndex, 1))]);
+    
+    vSetKeyFrames = addConnection(vSetKeyFrames, id1, id2, tform, 'Matches', matches);
+    disp(['Loop edge added between keyframe: ', num2str(loopCandidates(k)), ' and ', num2str(currKeyFrameId)]);
+
+    % Fuse co-visible map points
+    matchedIndex3d1 = index3d1(indexPairs(inlierIndex, 1));
+    matchedIndex3d2 = index3d2(indexPairs(inlierIndex, 2));
+    mapPoints = updateWorldPoints(mapPointSet, matchedIndex3d1, mapPointSet.WorldPoints(matchedIndex3d2, :));
+
+    isLoopClosed = 0;
+    if isLoopClosed
+        % Optimize the poses
+        minNumMatches      = 20;
+        vSetKeyFramesOptim = optimizePoses(vSetKeyFrames, minNumMatches, Tolerance=1e-16);
+    
+        % Update map points after optimizing the poses
+        mapPointSet = helperUpdateGlobalMap(mapPointSet, vSetKeyFrames, vSetKeyFramesOptim);
+    
+%         updatePlot(mapPlot, vSetKeyFrames, mapPointSet);
+%     
+%         % Plot the optimized camera trajectory
+%         optimizedPoses  = poses(vSetKeyFramesOptim);
+%         plotOptimizedTrajectory(mapPlot, optimizedPoses)
+    
+        % Update legend
+%         showLegend(mapPlot);
+    end
     % fin loop
     % actualziar ID e indices
     lastKeyFrameId  = currKeyFrameId;
@@ -426,53 +555,128 @@ while currFrameIdx < numel(imds.Files)
     addedFramesIdx  = [addedFramesIdx; currFrameIdx]; 
     currFrameIdx    = currFrameIdx + 1;
     
-    disp(['Imagen iteracion ', num2str(currFrameIdx),'... DONE'])    
+    disp(['Imagen iteracion ', num2str(currFrameIdx-1),'... DONE'])    
+
+    
+
 end
 %% test
-pcshow(mapPointSet.WorldPoints,'VerticalAxis','y','VerticalAxisDir','down','MarkerSize',45)
-plotCamera(vSetKeyFrames.Views)
-plotCameraPose(vSetKeyFrames.Views(1,:).AbsolutePose.R,vSetKeyFrames.Views(1,:).AbsolutePose.Translation, 1.5) 
+% pcshow(mapPointSet.WorldPoints,'VerticalAxis','y','VerticalAxisDir','down','MarkerSize',45)
+% plotCamera(vSetKeyFrames.Views)
+% plotCameraPose(vSetKeyFrames.Views(1,:).AbsolutePose.R,vSetKeyFrames.Views(1,:).AbsolutePose.Translation, 1.5) 
+% TODO 
+% añadir en las imaegnes el nombre del fichero
+% anadir que imagenes respecto al total de imagenes existentes
+% añadir todos los puntos ORB , 
+% otro plot con los puntos que existen en el 3d
+% otro plot con los datos creados por triangulacion
+
+
+% revisar que pasa con la pose final, 
+% revisar añadir loop closure algorithm..
+
+%% guardar datos
+% preguntar si guardar
+
 
 %% PLOTS FINAL
+plot_resultados(vSetKeyFrames,mapPointSet)
+plot_resultados(vSetKeyFramesOptim,mapPointSet)
+
 plot_info = 1; 
+steps_points = 5; % porcentaje de puntos a plotear
+steps_camera = 5; % porcentaje camera pose a plotear
+
 if plot_info
     % Plot Trajectory and 3D Points
     h = figure;
     subplot(2,2,[1,3])
-    for i=1:(vSetKeyFrames.NumViews)
-        plotCameraPose(vSetKeyFrames.Views(i,:).AbsolutePose.R,vSetKeyFrames.Views(i,:).AbsolutePose.Translation', 0.05);hold on
+    for i=1:steps_camera:(vSetKeyFrames.NumViews)
+%         plotCameraPose(vSetKeyFrames.Views(i,:).AbsolutePose.R,vSetKeyFrames.Views(i,:).AbsolutePose.Translation', 0.05);hold on
+        plotCameraPose(vSetKeyFramesOptim.Views(i,:).AbsolutePose.R,vSetKeyFramesOptim.Views(i,:).AbsolutePose.Translation', 0.05);hold on
     end
     title('SLAM 3d points + camera pose');
     hold on;
-    scatter3(mapPointSet.WorldPoints(:,1), mapPointSet.WorldPoints(:,2), mapPointSet.WorldPoints(:,3),1, 'b');
-    xlim([-1,1])
-    ylim([-1,1])
-    zlim([-1,1])
-    % front view
+    scatter3(mapPointSet.WorldPoints(1:steps_points:end,1), mapPointSet.WorldPoints(1:steps_points:end,2), mapPointSet.WorldPoints(1:steps_points:end,3),1, 'b');
+%     xlim([-1,1])
+%     ylim([-1,1])
+%     zlim([-1,1])
+
+    % Front view
     subplot(222)
     plot(mapPointSet.WorldPoints(:,1), mapPointSet.WorldPoints(:,2),'.b');
     for i=1:(vSetKeyFrames.NumViews)
-        plotCameraPoseXY(vSetKeyFrames.Views(i,:).AbsolutePose.R,vSetKeyFrames.Views(i,:).AbsolutePose.Translation', 0.05);hold on
+        plotCameraPoseXY(1*vSetKeyFrames.Views(i,:).AbsolutePose.R,vSetKeyFrames.Views(i,:).AbsolutePose.Translation', 0.05);hold on
     end
-    xlim([-1,1])
-    ylim([-1,1])
+    set(gca, 'YDir','reverse')
+%     xlim([-1,1])
+%     ylim([-1,1])
     ylabel('Y')
     xlabel('X')
     title ('Front view')
+    legend ('3D points')
 
+    % Top view
     subplot(224)
     plot(mapPointSet.WorldPoints(:,1), mapPointSet.WorldPoints(:,3),'.b');
     for i=1:(vSetKeyFrames.NumViews)
         plotCameraPoseXZ(vSetKeyFrames.Views(i,:).AbsolutePose.R,vSetKeyFrames.Views(i,:).AbsolutePose.Translation', 0.05);hold on
     end
-    xlim([-1,1])
-    ylim([-1,1])
+%     xlim([-1,1])
+%     ylim([-1,1])
     ylabel('Z')
     xlabel('X')
     title ('Top view')
-    %% TODO 
-    % plot numero puntos ORB detectadas
-    % plot numero matches
-    % plot numero inliers
+
+end
+
+%%
+plot_stats = 1;
+if plot_stats
+    % TODO 
+    % plot numero puntos ORB detectadas por frame DONE
+    % plot numero matches con frame anterior DONE
+    % plot numero inliers con frame anteior
+    % plot numero inliers con el resto de frames anteriores
+    % plot numero inliers con puntos ya existentes en 3d DONE
     % vs numero de frame/iteracion
+    f2 = figure;
+    clear Matches_points_prev Matches_views
+    % preparar datos a plotear
+    for i=1:vSetKeyFrames.NumViews
+        % puntos ORB por cada imagen
+        ORB_points_per_view(i) = vSetKeyFrames.Views.Points{i,1}.Count;
+
+        % conection con puntos 3d por frame
+        Points3D_per_frame(i) = length(findWorldPointsInView(mapPointSet,i));
+
+        % connection between 2 frames/views
+        if i < vSetKeyFrames.NumViews
+            % con el frame anterior
+            conn = findConnection(vSetKeyFrames,i,i+1);
+            Matches_points_prev(i) = length(conn.Matches{1,1});
+            
+            % con hasta 2 frames consecutivos
+            aux = connectedViews(vSetKeyFrames,i,MinNumMatches=10,MaxDistance=2);
+            Matches_views(i) = height(aux);
+        else
+            Matches_points_prev = [0, Matches_points_prev];
+            Matches_views = [0, Matches_views];
+        end
+    end
+
+    % hacer plots
+    plot(1:vSetKeyFrames.NumViews,ORB_points_per_view);
+    hold on;
+    plot(1:vSetKeyFrames.NumViews,Matches_points_prev);
+    plot(1:vSetKeyFrames.NumViews,Matches_views);
+    plot(1:vSetKeyFrames.NumViews,Points3D_per_frame);
+    grid on
+    ylim([-10,600])
+    xlabel('Imagenes')
+    ylabel('Nr')
+    legend('ORB puntos por imagen','Matches points','Matches views','3D points por imagen')
+            
+
+
 end
