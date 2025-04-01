@@ -1,12 +1,17 @@
-%% Load data
 clc; clear; close all;
-% imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_test/'];
-% imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_toma2/'];
-imageFolder   = ['/home/efren/Escritorio/TFM/datos/Crazyflie_toma4/'];
 
-% imageFolder   = ['//home/efren/Escritorio/TFM/datos/Camara_movil_test2//'];
-% imageFolder   = ['//home/efren/Escritorio/TFM/datos/Camara_movil_test5//'];
-% 
+% mover el path donde esta el fichero actual
+file_path = fileparts(matlab.desktop.editor.getActiveFilename);
+cd(file_path);
+
+%% Settings
+% seleccionar path con la base de dato de imagenes
+% imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_test/';
+% imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma2/';
+imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma4/';
+% imageFolder   = '//home/efren/Escritorio/TFM/datos/Camara_movil_test2//';
+% imageFolder   = '//home/efren/Escritorio/TFM/datos/Camara_movil_test5//';
+
 imds          = imageDatastore(imageFolder);
 disp(['Imagenes cargadas: ', num2str(numel(imds.Files))])
 
@@ -22,32 +27,47 @@ pathOutputs = (fullfile(imageFolder,NewSubFolder));
 CrearPlots = 1;
 mostrar_figuras = 'off';
 
-%% Iniciar mapa 3D
-% leer la primera imagen
-disp ('Analizando primera imagen...')
-currFrameIdx = 1;
-currI = readimage(imds, currFrameIdx);
+% ORB features settings
+scaleFactor = 1.2;
+numLevels   = 8;
+numPoints   = 500;
 
-% Cargar coeficientes de calibracion de la camara
+%% Cargar coeficientes de calibracion de la camara
 load('/home/efren/Escritorio/TFM/Calibrar Crazyflie/CrazyFlie_CameraCalibration06022025_3coeff.mat')
 % load('/home/efren/PycharmProjects/TFM/Calibrar/CameraCalibration_3coeff_movil.mat');
 % cameraParams_3coeff = cameraParams_movil;
 % cameraParams = cameraParams_3coeff;
 
-focalLength    = cameraParams.FocalLength;    % in units of pixels
+focalLength    = cameraParams.FocalLength;       % in units of pixels
 principalPoint = cameraParams.PrincipalPoint;    % in units of pixels
-imageSize      = size(currI,[1 2]);  % in units of pixels
+imageSize      = cameraParams.ImageSize;         % in units of pixels    
 RadialDistorsion  = [cameraParams.RadialDistortion];
-RadialDistorsion  = [0 0 0];
+RadialDistorsion  = [0 0 0];                     % not used
 TangencialDistorsion = cameraParams.TangentialDistortion;
-TangencialDistorsion = [0 0];
+TangencialDistorsion = [0 0];                    % not used
+
 intrinsics     = cameraIntrinsics(focalLength, principalPoint, imageSize, "RadialDistortion",RadialDistorsion, "TangentialDistortion",TangencialDistorsion);
-disp(['Images resolucion: ', num2str(imageSize(1)),'x',num2str(imageSize(2))]);
+disp('Camera settings:')
+disp([' -- Resolucion: ', num2str(imageSize(1)),'x',num2str(imageSize(2))]);
+disp([' -- Focal Length: f1=', num2str(focalLength(1)),' & f2=',num2str(focalLength(2))]);
+
 disp('Camera settings loaded');
 
-% Check camera checkings and image resolution match
-if imageSize(2)~= cameraParams.ImageSize(1) ||  imageSize(1)~= cameraParams.ImageSize(2)
-    disp('Los settings de calibracion no cuadran con las imagenes.');
+%% Analizar primera imagen
+% leer la primera imagen
+disp ('Analizando primera imagen...')
+currFrameIdx = 1;
+currI = readimage(imds, currFrameIdx);
+
+[~ ,name,ext] = fileparts(imds.Files(currFrameIdx));
+disp (['Imagen - ',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),'- ',name, ext]) 
+
+% Check camera checkings vs image resolution match
+RealImageSize      = size(currI,[1 2]);              % in units of pixels
+if RealImageSize(2) ~= cameraParams.ImageSize(1) ||  RealImageSize(1)~= cameraParams.ImageSize(2)
+    error('ERROR: Los settings de calibracion NO cuadran con las imagenes.');
+else
+    disp('Los settings de calibracion cuadran con las imagenes.');
 end
 
 % Set random seed for reproducibility
@@ -57,26 +77,26 @@ rng(0);
 currI_corr{currFrameIdx}  = undistortImage(currI, intrinsics);
 
 % Detect and extract ORB features
-scaleFactor = 1.2;
-numLevels   = 8;
-numPoints   = 500;
 [preFeatures, prePoints, preAllPoints] = DetectAndExtractFeatures(currI_corr{currFrameIdx}, scaleFactor, numLevels, numPoints, intrinsics); 
 
-% firstI       = currI; % Preserve the first frame 
-firstI       = currI_corr{currFrameIdx}; % Preserve the first frame corrected
+% Guardo la primera imagen
+firstI       = currI_corr{currFrameIdx}; 
 
+% Aumento indice con el contador de imagenes
 currFrameIdx = currFrameIdx + 1;
 
+% Flag para confirmar la inicializacion del mapa
 isMapInitialized  = false;
 
 disp ('Analizando primera imagen...DONE')
 
-%% Map initialization loop
+%% Step - 2 Loop para inicializar mapa 3D
+disp ('Step 2 - Inicializacion del mapa 3D.... ')
 while ~isMapInitialized && currFrameIdx < numel(imds.Files)
-    disp (['presiona cualquier tecla para continuar...'])
+%     disp (['presiona cualquier tecla para continuar...'])
 %     pause;
     currI = readimage(imds, currFrameIdx);
-    disp (['Imagen - ',num2str(currFrameIdx),'...'])
+    disp (['Step 2 - Imagen - ',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),' - ',name, ext]) 
 
     % Corregir imagen
     currI_corr{currFrameIdx}  = undistortImage(currI, intrinsics);
@@ -85,7 +105,7 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 
     currFrameIdx = currFrameIdx + 1;
 
-    % Find putative feature matches
+    % Encontrar match entre features
     indexPairs = matchFeatures(preFeatures, currFeatures, Unique=true, MaxRatio=0.9, MatchThreshold=40);
 
     % If not enough matches are found, check the next frame
@@ -119,16 +139,17 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 %         tform          = tformF;
 %     end
 
-    % Obtener Essential matrix appliying RANSAC
+    % Obtener Essential matrix aplicando RANSAC
     clear inliersIdx
     [E, inliersIdx] = estimateEssentialMatrix(preMatchedPoints, currMatchedPoints, cameraParams,'MaxNumTrials', 500, 'Confidence', 99.9, 'MaxDistance', 1);
     
-    inlierTformIdx = inliersIdx;
+    inlierTformIdx = inliersIdx; % delete?
     tform = E;
-    % Computes the camera location up to scale. Use half of the 
-    % points to reduce computation
-    inlierPrePoints  = preMatchedPoints(inlierTformIdx);
-    inlierCurrPoints = currMatchedPoints(inlierTformIdx);
+
+    % Calcular camera pose - usamos todos los puntos? o solo una parte?
+    % por defecto se usan todos los puntos
+    inlierPrePoints  = preMatchedPoints(inliersIdx);
+    inlierCurrPoints = currMatchedPoints(inliersIdx);
     indexPairs = indexPairs(inliersIdx,:);
 
 %     % Display Matches & Inliers 
@@ -141,6 +162,8 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 %     showMatchedFeatures(firstI, currI_corr{currFrameIdx-1}, inlierPrePoints, inlierCurrPoints, 'montage');
 %     title(['Inliers - ',num2str(inlierPrePoints.Count), ' points']);
 
+
+    % Camera relative pose between frames
     [relPose, validFraction] = estrelpose(tform, intrinsics, inlierPrePoints(1:2:end), inlierCurrPoints(1:2:end));
 
     % If not enough inliers are found, move to the next frame
@@ -150,8 +173,8 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     end
 
     % Triangulate two views to obtain 3-D map points
-    minParallax = 2; % In degrees
-    [isValid, xyzWorldPoints, inlierTriangulationIdx] = helperTriangulateTwoFrames(...
+    minParallax = 20; % In deg
+    [isValid, xyzWorldPoints, inlierTriangulationIdx] = TriangulateTwoFrames(...
         rigidtform3d, relPose, inlierPrePoints, inlierCurrPoints, intrinsics, minParallax);
     
     % Q&D
@@ -160,6 +183,7 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
         disp (['Imagen - ',num2str(currFrameIdx-1),'...triangulacion no valida']);
         continue
     end
+    % Q&D end
 
     inlierPrePoints  = inlierPrePoints(inlierTriangulationIdx);
     inlierCurrPoints = inlierCurrPoints(inlierTriangulationIdx);
@@ -186,12 +210,13 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 
     isMapInitialized = true;
 
-    disp(['Map initialized with frame 1 and frame ', num2str(currFrameIdx-1)])
-end % End of map initialization loop
+end
+disp(['Step 2 - Mapa 3D inicializado con imagenes 1 e imagen ', num2str(currFrameIdx-1)])
+disp ('Step 2 - Inicializacion del mapa 3D.... DONE ')
 
 %% Iniciar mapa3d y views 
 % Create an empty imageviewset object to store key frames
-disp(['Almacenar mapa 3d y camera pose... '])
+disp(['Step 2 - Almacenar mapa 3d y camera pose... '])
 vSetKeyFrames = imageviewset;
 
 % Create an empty worldpointset object to store 3-D map points
@@ -220,10 +245,9 @@ mapPointSet   = addCorrespondences(mapPointSet, preViewId, newPointIdx, indexPai
 % Add image points corresponding to the map points in the second key frame
 mapPointSet   = addCorrespondences(mapPointSet, currViewId, newPointIdx, indexPairs(:,2));
 
-disp(['Almacenar mapa 3d y camera pose... DONE'])
-
-%%TODO bundle adjustment... 
-disp(['Aplicar bundle adjustment... '])
+disp(['Step 2 - Almacenar mapa 3d y camera pose... DONE'])
+ 
+disp(['Step 2 - Aplicar bundle adjustment... '])
 % Run full bundle adjustment on the first two key frames
 tracks       = findTracks(vSetKeyFrames);
 cameraPoses  = poses(vSetKeyFrames);
@@ -255,20 +279,11 @@ mapPointSet = updateLimitsAndDirection(mapPointSet, newPointIdx, vSetKeyFrames.V
 % Update representative view
 mapPointSet = updateRepresentativeView(mapPointSet, newPointIdx, vSetKeyFrames.Views);
 
-% Visualize matched features in the current frame
-% close(hfeature.Parent.Parent);
-% featurePlot   = helperVisualizeMatchedFeatures(currI, currPoints(indexPairs(:,2)));
+disp(['Step 2 - Aplicar bundle adjustment...DONE '])
 
-% Visualize initial map points and camera trajectory
-% mapPlot       = helperVisualizeMotionAndStructure(vSetKeyFrames, mapPointSet);
-% Show legend
-% showLegend(mapPlot);
-
-disp(['Aplicar bundle adjustment...DONE '])
-
-%% Tracking
+%% Step 3 - Tracking
 % ViewId of the current key frame
-disp (['Leyendo el resto de imagenes... '])
+disp ('Step 3 - Leer el resto de imagenes... ')
 currKeyFrameId   = currViewId;
 
 % ViewId of the last key frame
@@ -281,7 +296,6 @@ lastKeyFrameIdx  = currFrameIdx - 1;
 addedFramesIdx   = [1; lastKeyFrameIdx];
 
 isLoopClosed     = false;
-
 
 % Loop principal
 isLastFrameKeyFrame = true;
@@ -434,7 +448,22 @@ while currFrameIdx <= numel(imds.Files)
     saveas(f1,[pathOutputs,'/Inliers_blend_',name,'.png']) ;
     close(f1);
 
-    % Check Loop Closure
+    % fin loop
+    % actualziar ID e indices
+    lastKeyFrameId  = currKeyFrameId;
+    lastKeyFrameIdx = currFrameIdx;
+    addedFramesIdx  = [addedFramesIdx; currFrameIdx]; 
+    currFrameIdx    = currFrameIdx + 1;
+    
+    disp(['Imagen iteracion ', num2str(currFrameIdx-1),'... DONE'])      
+
+end
+disp('Step 3 - Leer el resto de imagenes... DONE')
+
+%% Step 4 - Check Loop Closure
+step4 = 0;
+disp('Step 4 - Check loop closure... ')
+if step4
     % mathing features - propueta sencilla pero pesada compitacopalmente
     % hacer el match con el current frama y los features delos frames
     % pasados
@@ -528,7 +557,7 @@ while currFrameIdx <= numel(imds.Files)
     % Fuse co-visible map points
     matchedIndex3d1 = index3d1(indexPairs(inlierIndex, 1));
     matchedIndex3d2 = index3d2(indexPairs(inlierIndex, 2));
-    mapPoints = updateWorldPoints(mapPointSet, matchedIndex3d1, mapPointSet.WorldPoints(matchedIndex3d2, :));
+    mapPoints_opt = updateWorldPoints(mapPointSet, matchedIndex3d1, mapPointSet.WorldPoints(matchedIndex3d2, :));
 
     isLoopClosed = 0;
     if isLoopClosed
@@ -537,29 +566,15 @@ while currFrameIdx <= numel(imds.Files)
         vSetKeyFramesOptim = optimizePoses(vSetKeyFrames, minNumMatches, Tolerance=1e-16);
     
         % Update map points after optimizing the poses
-        mapPointSet = helperUpdateGlobalMap(mapPointSet, vSetKeyFrames, vSetKeyFramesOptim);
+        mapPoints_opt = helperUpdateGlobalMap(mapPointSet, vSetKeyFrames, vSetKeyFramesOptim);
     
-%         updatePlot(mapPlot, vSetKeyFrames, mapPointSet);
-%     
-%         % Plot the optimized camera trajectory
-%         optimizedPoses  = poses(vSetKeyFramesOptim);
-%         plotOptimizedTrajectory(mapPlot, optimizedPoses)
-    
-        % Update legend
-%         showLegend(mapPlot);
-    end
-    % fin loop
-    % actualziar ID e indices
-    lastKeyFrameId  = currKeyFrameId;
-    lastKeyFrameIdx = currFrameIdx;
-    addedFramesIdx  = [addedFramesIdx; currFrameIdx]; 
-    currFrameIdx    = currFrameIdx + 1;
-    
-    disp(['Imagen iteracion ', num2str(currFrameIdx-1),'... DONE'])    
+    end    
 
-    
-
+else
+    disp('Step 4 - skip................')
 end
+disp('Step 4 - Check loop closure... DONE')
+
 %% test
 % pcshow(mapPointSet.WorldPoints,'VerticalAxis','y','VerticalAxisDir','down','MarkerSize',45)
 % plotCamera(vSetKeyFrames.Views)
@@ -572,16 +587,17 @@ end
 % otro plot con los datos creados por triangulacion
 
 
-% revisar que pasa con la pose final, 
-% revisar añadir loop closure algorithm..
-
 %% guardar datos
 % preguntar si guardar
 
 
 %% PLOTS FINAL
 plot_resultados(vSetKeyFrames,mapPointSet)
-plot_resultados(vSetKeyFramesOptim,mapPointSet)
+plot_resultados(vSetKeyFramesOptim,mapPoints_opt)
+figure;
+plotTrayectoryXYZ(vSetKeyFrames)
+hold on;
+plotTrayectoryXYZ(vSetKeyFrames,'b')
 
 plot_info = 1; 
 steps_points = 5; % porcentaje de puntos a plotear
@@ -677,6 +693,4 @@ if plot_stats
     ylabel('Nr')
     legend('ORB puntos por imagen','Matches points','Matches views','3D points por imagen')
             
-
-
 end
