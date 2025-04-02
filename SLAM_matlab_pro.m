@@ -354,9 +354,6 @@ while currFrameIdx <= numel(imds.Files)
         featureIdx, currPose, currFeatures, currPoints, intrinsics, scaleFactor, numLevels, ...
         isLastFrameKeyFrame, lastKeyFrameIdx, currFrameIdx, numSkipFrames, numPointsKeyFrame);
 
-    % Visualize matched features
-%     updatePlot(featurePlot, currI, currPoints(featureIdx));
-
     isKeyFrame = 1;
     if ~isKeyFrame
         currFrameIdx        = currFrameIdx + 1;
@@ -402,9 +399,6 @@ while currFrameIdx <= numel(imds.Files)
 
     % Update representative view
     mapPointSet = updateRepresentativeView(mapPointSet, mapPointIdx, vSetKeyFrames.Views);
-
-    % Visualize 3D world points and camera trajectory
-%     updatePlot(mapPlot, vSetKeyFrames, mapPointSet);
 
     % Set the feature points to be tracked
     [~, index2d] = findWorldPointsInView(mapPointSet, currKeyFrameId);
@@ -464,6 +458,9 @@ disp('Step 3 - Leer el resto de imagenes... DONE')
 step4 = 0;
 disp('Step 4 - Check loop closure... ')
 if step4
+
+    % Detectar loop closure
+    % cada 20 keyf
     % mathing features - propueta sencilla pero pesada compitacopalmente
     % hacer el match con el current frama y los features delos frames
     % pasados
@@ -476,97 +473,112 @@ if step4
             disp(['Loop closure detected between current frame...', num2str(matchedFrameIdx)])
         end
     end
-
-    % Q&D manual loop closure para chequear como queda el mapa3d
-    id1 = 1; loopCandidates(1) = id1;
-    id2 = 418;
-    % extraer los indicies de los puntos 3d de la imagen actual, y los indices de los
-    % feaures correspondientes 
-    [index3d1, index2d1] = findWorldPointsInView(mapPointSet, id1);
-    allFeatures1   = vSetKeyFrames.Views.Features{id1};
-    validFeatures1  = allFeatures1(index2d1, :);
-   
-    [index3d2, index2d2] = findWorldPointsInView(mapPointSet, id2);
-    allFeatures2   = vSetKeyFrames.Views.Features{id2};
-    validFeatures2 = allFeatures2(index2d2, :);
-
-%     indexPairs = matchFeatures(binaryFeatures(allFeatures1), binaryFeatures(allFeatures2), ...
-%         'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
-
-    indexPairs = matchFeatures(binaryFeatures(validFeatures1), binaryFeatures(validFeatures2), ...
-        'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
-
-    % check
-    [FeaId1, PointsId1] = DetectAndExtractFeatures(currI_corr{1} , scaleFactor, numLevels, 500);
-    [FeaId2, PointsId2] = DetectAndExtractFeatures(currI_corr{id2} , scaleFactor, numLevels, 500);
-    indexPairs = matchFeatures(FeaId1, FeaId2, ...
-        'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
-    clear inliersIdx
-    [E, inliersIdx] = estimateEssentialMatrix(PointsId1(indexPairs(:,1)), PointsId2(indexPairs(:,2)), cameraParams,'MaxNumTrials', 500, 'Confidence', 99.9, 'MaxDistance', 1);
     
-    Inliers1 = PointsId1(indexPairs(:,1));
-    Inliers1 = Inliers1(inliersIdx);
-    Inliers2 = PointsId2(indexPairs(:,2));
-    Inliers2 = Inliers2(inliersIdx);
-    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, Inliers1, Inliers2, 'montage');
-
-    % chequeo la info guardada, me da lo mismo
-    sum(sum(FeaId1.Features - vSetKeyFrames.Views.Features{loopCandidates(1)}))
-    sum(sum(FeaId2.Features - vSetKeyFrames.Views.Features{418}))
-    sum(sum(FeaId2.Features - currFeatures.Features))
-    % end check
-
-    % mostrar imagenes
-    figure; 
-    imshow(currI_corr{id1});
-    figure; 
-    imshow(currI_corr{id2});
-
-    worldPoints1 = mapPointSet.WorldPoints(index3d1(indexPairs(:, 1)), :);
-    worldPoints2 = mapPointSet.WorldPoints(index3d2(indexPairs(:, 2)), :);
-
-    tform1 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id1));
-    tform2 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id2));
-
-    worldPoints1InCamera1 = transformPointsForward(tform1, worldPoints1) ;
-    worldPoints2InCamera2 = transformPointsForward(tform2, worldPoints2) ;
-
-    w = warning('off','all');
-    [tform, inlierIndex] = estgeotform3d(...
-        worldPoints1InCamera1, worldPoints2InCamera2, 'similarity', 'MaxDistance', 0.1);
-    warning(w);
-
-    f1 = figure('visible','on');
-    points1_location = vSetKeyFrames.Views.Points{id1}.Location(index2d1(indexPairs(:, 1)),:);     
-    points2_location = vSetKeyFrames.Views.Points{id2}.Location(index2d2(indexPairs(:, 2)),:);   
-
-    points1_location_inliers  = points1_location(inlierIndex,:);     
-    points2_location_inliers  = points2_location(inlierIndex,:); 
-
-    figure;
-    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location, points2_location, 'montage');
-    figure;
-    showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location_inliers, points2_location_inliers, 'montage');
-  
-    % Add connection between the current key frame and the loop key frame
-    matches = uint32([index2d2(indexPairs(inlierIndex, 2)), index2d1(indexPairs(inlierIndex, 1))]);
+    % Aplicar loop closure
+    LoopClosureDetected = 1;
+    if LoopClosureDetected 
+        % Q&D manual loop closure para chequear como queda el mapa3d
+        id1 = 1;
+        id2 = 418;
+        [filepath1,name1,ext1] = fileparts(imds.Files(id1));
+        [filepath2,name2,ext2] = fileparts(imds.Files(id2));
     
-    vSetKeyFrames = addConnection(vSetKeyFrames, id1, id2, tform, 'Matches', matches);
-    disp(['Loop edge added between keyframe: ', num2str(loopCandidates(k)), ' and ', num2str(currKeyFrameId)]);
+        % extraer los indicies de los puntos 3d de la imagen actual, y los indices de los
+        % feaures correspondientes 
+        [index3d1, index2d1] = findWorldPointsInView(mapPointSet, id1);
+        allFeatures1   = vSetKeyFrames.Views.Features{id1};
+        validFeatures1  = allFeatures1(index2d1, :);
+       
+        [index3d2, index2d2] = findWorldPointsInView(mapPointSet, id2);
+        allFeatures2   = vSetKeyFrames.Views.Features{id2};
+        validFeatures2 = allFeatures2(index2d2, :);
+    
+        indexPairs = matchFeatures(binaryFeatures(validFeatures1), binaryFeatures(validFeatures2), ...
+            'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
+    
+%         % Check
+%         [FeaId1, PointsId1] = DetectAndExtractFeatures(currI_corr{1} , scaleFactor, numLevels, 500);
+%         [FeaId2, PointsId2] = DetectAndExtractFeatures(currI_corr{id2} , scaleFactor, numLevels, 500);
+%         indexPairs = matchFeatures(FeaId1, FeaId2, ...
+%             'Unique', true, 'MaxRatio', 0.9, 'MatchThreshold', 40);
+%         clear inliersIdx
+%         [E, inliersIdx] = estimateEssentialMatrix(PointsId1(indexPairs(:,1)), PointsId2(indexPairs(:,2)), cameraParams,'MaxNumTrials', 500, 'Confidence', 99.9, 'MaxDistance', 1);
+%         
+%         Inliers1 = PointsId1(indexPairs(:,1));
+%         Inliers1 = Inliers1(inliersIdx);
+%         Inliers2 = PointsId2(indexPairs(:,2));
+%         Inliers2 = Inliers2(inliersIdx);
+%         showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, Inliers1, Inliers2, 'montage');
+%     
+%         % chequeo la info guardada, me da lo mismo
+%         sum(sum(FeaId1.Features - vSetKeyFrames.Views.Features{loopCandidates(1)}))
+%         sum(sum(FeaId2.Features - vSetKeyFrames.Views.Features{418}))
+%         sum(sum(FeaId2.Features - currFeatures.Features))
+%         % end check
+    
+        % mostrar imagenes
+        figure; 
+        imshow(currI_corr{id1});
+        figure; 
+        imshow(currI_corr{id2});
+    
+        worldPoints1 = mapPointSet.WorldPoints(index3d1(indexPairs(:, 1)), :);
+        worldPoints2 = mapPointSet.WorldPoints(index3d2(indexPairs(:, 2)), :);
+    
+        tform1 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id1));
+        tform2 = pose2extr(vSetKeyFrames.Views.AbsolutePose(id2));
+    
+        worldPoints1InCamera1 = transformPointsForward(tform1, worldPoints1) ;
+        worldPoints2InCamera2 = transformPointsForward(tform2, worldPoints2) ;
+    
+        [tform, inlierIndex] = estgeotform3d(...
+            worldPoints1InCamera1, worldPoints2InCamera2, 'similarity', 'MaxDistance', 0.1);
+    
+        f1 = figure('visible','on');
+        points1_location = vSetKeyFrames.Views.Points{id1}.Location(index2d1(indexPairs(:, 1)),:);     
+        points2_location = vSetKeyFrames.Views.Points{id2}.Location(index2d2(indexPairs(:, 2)),:);   
+        points1_location_inliers  = points1_location(inlierIndex,:);     
+        points2_location_inliers  = points2_location(inlierIndex,:); 
+    
+        subplot(211);
+        showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location, points2_location, 'montage');
+        title({['Loop Closure - ',num2str(length(points1_location)),' match points'],...+
+               [name1,' - ' name2]},...
+               'Interpreter','None');
+        subplot(212);
+        showMatchedFeatures(currI_corr{id1}, currI_corr{id2}, points1_location_inliers, points2_location_inliers, 'montage');
+        title({['Loop Closure - ',num2str(length(points1_location_inliers)),' inlier points'],...+
+               [name1,' - ' name2]},...
+               'Interpreter','None');
+        saveas(f1,[pathOutputs,'/LoopClosure_blend.png']) ;
+        close(f1);
+    
+        % Add connection between the current key frame and the loop key frame
+        matches = uint32([index2d1(indexPairs(inlierIndex, 1)), index2d2(indexPairs(inlierIndex, 2))]);
+        
+        vSetKeyFrames_LoopClosure = addConnection(vSetKeyFrames, id1, id2, tform, 'Matches', matches);
+%         vSetKeyFrames = deleteConnection(vSetKeyFrames,id1,id2);
+        disp(['Loop closure añadido entre imagen: ', num2str(id1), ' y ', num2str(id2)]);
+    
+        % Fuse co-visible map points
+        matchedIndex3d1 = index3d1(indexPairs(inlierIndex, 1));
+        matchedIndex3d2 = index3d2(indexPairs(inlierIndex, 2));
+        mapPoints_LoopClosure= updateWorldPoints(mapPointSet, matchedIndex3d2, mapPointSet.WorldPoints(matchedIndex3d1, :));
+    
+        if length(matches) > 20
+            isLoopClosed = 1;
+        else
+            isLoopClosed = 0;
+        end
+    end
 
-    % Fuse co-visible map points
-    matchedIndex3d1 = index3d1(indexPairs(inlierIndex, 1));
-    matchedIndex3d2 = index3d2(indexPairs(inlierIndex, 2));
-    mapPoints_opt = updateWorldPoints(mapPointSet, matchedIndex3d1, mapPointSet.WorldPoints(matchedIndex3d2, :));
-
-    isLoopClosed = 0;
     if isLoopClosed
         % Optimize the poses
         minNumMatches      = 20;
-        vSetKeyFramesOptim = optimizePoses(vSetKeyFrames, minNumMatches, Tolerance=1e-16);
+        vSetKeyFrames_LoopClosure_Opt = optimizePoses(vSetKeyFrames_LoopClosure, minNumMatches, Tolerance=1e-16);
     
         % Update map points after optimizing the poses
-        mapPoints_opt = helperUpdateGlobalMap(mapPointSet, vSetKeyFrames, vSetKeyFramesOptim);
+        mapPoints_LoopClosure_Opt = helperUpdateGlobalMap(mapPoints_LoopClosure, vSetKeyFrames_LoopClosure, vSetKeyFrames_LoopClosure_Opt);
     
     end    
 
@@ -576,9 +588,6 @@ end
 disp('Step 4 - Check loop closure... DONE')
 
 %% test
-% pcshow(mapPointSet.WorldPoints,'VerticalAxis','y','VerticalAxisDir','down','MarkerSize',45)
-% plotCamera(vSetKeyFrames.Views)
-% plotCameraPose(vSetKeyFrames.Views(1,:).AbsolutePose.R,vSetKeyFrames.Views(1,:).AbsolutePose.Translation, 1.5) 
 % TODO 
 % añadir en las imaegnes el nombre del fichero
 % anadir que imagenes respecto al total de imagenes existentes
@@ -592,8 +601,9 @@ disp('Step 4 - Check loop closure... DONE')
 
 
 %% PLOTS FINAL
-plot_resultados(vSetKeyFrames,mapPointSet)
-plot_resultados(vSetKeyFramesOptim,mapPoints_opt)
+plot_resultados(vSetKeyFrames, mapPointSet)
+plot_resultados(vSetKeyFrames_LoopClosure_Opt, mapPoints_LoopClosure_Opt)
+
 figure;
 plotTrayectoryXYZ(vSetKeyFrames)
 hold on;
