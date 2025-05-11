@@ -5,10 +5,12 @@ file_path = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(file_path);
 
 %% Settings
+
 % seleccionar path con la base de dato de imagenes
 % imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_test/';
 % imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma2/';
 imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma4/';
+% imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma5/';
 % imageFolder   = '//home/efren/Escritorio/TFM/datos/Camara_movil_test2//';
 % imageFolder   = '//home/efren/Escritorio/TFM/datos/Camara_movil_test5//';
 
@@ -82,6 +84,15 @@ currI_corr{currFrameIdx}  = undistortImage(currI, intrinsics);
 % Guardo la primera imagen
 firstI       = currI_corr{currFrameIdx}; 
 
+% save plot with ORB points
+f1 = figure('visible',mostrar_figuras);
+[filepath,name,ext] = fileparts(imds.Files(currFrameIdx));
+imshow(currI_corr{currFrameIdx});hold on;
+plot(prePoints,'ShowScale',false, showOrientation=false)
+title(['All ORB - ',num2str(prePoints.Count), ' points - ',name,' - (',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),')'],'Interpreter','None');
+saveas(f1,[pathOutputs,'/All_ORB_points_',name,'.png']) ;
+close(f1);
+
 % Aumento indice con el contador de imagenes
 currFrameIdx = currFrameIdx + 1;
 
@@ -96,6 +107,7 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 %     disp (['presiona cualquier tecla para continuar...'])
 %     pause;
     currI = readimage(imds, currFrameIdx);
+    [~ ,name,ext] = fileparts(imds.Files(currFrameIdx));
     disp (['Step 2 - Imagen - ',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),' - ',name, ext]) 
 
     % Corregir imagen
@@ -103,10 +115,17 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 
     [currFeatures, currPoints] = DetectAndExtractFeatures(currI_corr{currFrameIdx} , scaleFactor, numLevels, numPoints); 
 
-    currFrameIdx = currFrameIdx + 1;
-
     % Encontrar match entre features
     indexPairs = matchFeatures(preFeatures, currFeatures, Unique=true, MaxRatio=0.9, MatchThreshold=40);
+
+    % save plot
+    f1 = figure('visible',mostrar_figuras);
+    [filepath,name,ext] = fileparts(imds.Files(currFrameIdx));
+    imshow(currI_corr{currFrameIdx});hold on;
+    plot(currPoints,'ShowScale',false, showOrientation=false)
+    title(['All ORB - ',num2str(currPoints.Count), ' points - ',name,' - (',num2str(currFrameIdx),'/',num2str(numel(imds.Files)),')'],'Interpreter','None');
+    saveas(f1,[pathOutputs,'/All_ORB_points_',name,'.png']) ;
+    close(f1);
 
     % If not enough matches are found, check the next frame
 %     minMatches = 100;
@@ -165,10 +184,11 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 
     % Camera relative pose between frames
     [relPose, validFraction] = estrelpose(tform, intrinsics, inlierPrePoints(1:2:end), inlierCurrPoints(1:2:end));
+%     [relPose, validFraction] = estrelpose(tform, intrinsics, inlierPrePoints, inlierCurrPoints);
 
     % If not enough inliers are found, move to the next frame
     if validFraction < 0.9 || numel(relPose)>1
-        disp (['Imagen - ',num2str(currFrameIdx-1),'...no sufientes inliers']);
+        disp (['Imagen - ',num2str(currFrameIdx),'...no sufientes inliers']);
         continue
     end
 
@@ -180,7 +200,7 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     % Q&D
     isValid = 1;
     if ~isValid
-        disp (['Imagen - ',num2str(currFrameIdx-1),'...triangulacion no valida']);
+        disp (['Imagen - ',num2str(currFrameIdx),'...triangulacion no valida']);
         continue
     end
     % Q&D end
@@ -188,16 +208,33 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
     inlierPrePoints  = inlierPrePoints(inlierTriangulationIdx);
     inlierCurrPoints = inlierCurrPoints(inlierTriangulationIdx);
 
-    % Display Matches & Final Inliers 
+    % generar plots con matches e inliers
     f1 = figure;
-    subplot(211)
-    showMatchedFeatures(firstI, currI_corr{currFrameIdx-1}, preMatchedPoints, currMatchedPoints, 'montage');
+    showMatchedFeatures(firstI, currI_corr{currFrameIdx}, preMatchedPoints, currMatchedPoints, 'montage');
     title(['Inicializar-Matches - ',num2str(currMatchedPoints.Count), ' points']);
+    saveas(f1,[pathOutputs,'/Inicializar-MatchesPoints_montage.png']) ;
+    saveas(f1,[pathOutputs,'/Inicializar-MatchesPoints_montage.fig']) ;
+    close(f1);
 
-    subplot(212);
-    showMatchedFeatures(firstI, currI_corr{currFrameIdx-1}, inlierPrePoints, inlierCurrPoints, 'montage');
+    f1 = figure;
+    showMatchedFeatures(firstI, currI_corr{currFrameIdx}, inlierPrePoints, inlierCurrPoints, 'montage');
     title(['Inicializar-Inliers - ',num2str(inlierPrePoints.Count), ' points']);
-    saveas(f1,[pathOutputs,'/Inicializar-MatchesInliersPoints.png']) ;
+    saveas(f1,[pathOutputs,'/Inicializar-InliersPoints_montage.png']) ;
+    saveas(f1,[pathOutputs,'/Inicializar-InliersPoints_montage.fig']) ;
+    close(f1);
+
+    f1 = figure;
+    showMatchedFeatures(firstI, currI_corr{currFrameIdx}, preMatchedPoints, currMatchedPoints, 'blend');
+    title(['Inicializar-Matches - ',num2str(currMatchedPoints.Count), ' points']);
+    saveas(f1,[pathOutputs,'/Inicializar-MatchesPoints_blend.png']) ;
+    saveas(f1,[pathOutputs,'/Inicializar-MatchesPoints_blend.fig']) ;
+    close(f1);
+
+    f1 = figure;
+    showMatchedFeatures(firstI, currI_corr{currFrameIdx}, inlierPrePoints, inlierCurrPoints, 'blend');
+    title(['Inicializar-Inliers - ',num2str(inlierPrePoints.Count), ' points']);
+    saveas(f1,[pathOutputs,'/Inicializar-InliersPoints_blend.png']) ;
+    saveas(f1,[pathOutputs,'/Inicializar-InliersPoints_blend.fig']) ;
     close(f1);
 
     % Get the original index of features in the two key frames
@@ -209,6 +246,9 @@ while ~isMapInitialized && currFrameIdx < numel(imds.Files)
 %     title(['Inliers - ',num2str(inlierPrePoints.Count), ' points']);
 
     isMapInitialized = true;
+    
+    % move to next frame
+    currFrameIdx = currFrameIdx + 1;
 
 end
 disp(['Step 2 - Mapa 3D inicializado con imagenes 1 e imagen ', num2str(currFrameIdx-1)])
@@ -233,7 +273,7 @@ currViewId    = 2;
 vSetKeyFrames = addView(vSetKeyFrames, currViewId, relPose, Points=currPoints,...
     Features=currFeatures.Features);
 
-% Add connection between the first and the second key frame
+% Add connection between the first and the second keymatches = uint32([index2d1(indexPairs(inlierIndex, 1)), index2d2(indexPairs(inlierIndex, 2))]); frame
 vSetKeyFrames = addConnection(vSetKeyFrames, preViewId, currViewId, relPose, Matches=indexPairs);
 
 % Add 3-D map points
@@ -280,6 +320,12 @@ mapPointSet = updateLimitsAndDirection(mapPointSet, newPointIdx, vSetKeyFrames.V
 mapPointSet = updateRepresentativeView(mapPointSet, newPointIdx, vSetKeyFrames.Views);
 
 disp(['Step 2 - Aplicar bundle adjustment...DONE '])
+
+% mostrar modelo 3d inicial
+plot_resultados(vSetKeyFrames, mapPointSet)
+f = gcf;
+saveas(f,[pathOutputs,'/Inicializar-InliersPoints_3d_bis.fig']) ;
+close(f);
 
 %% Step 3 - Tracking
 % ViewId of the current key frame
@@ -455,14 +501,14 @@ end
 disp('Step 3 - Leer el resto de imagenes... DONE')
 
 %% Step 4 - Check Loop Closure
-step4 = 0;
+step4 = 1;
 disp('Step 4 - Check loop closure... ')
 if step4
 
     % Detectar loop closure
     % cada 20 keyf
     % mathing features - propueta sencilla pero pesada compitacopalmente
-    % hacer el match con el current frama y los features delos frames
+    % hacer el match con el current frame y los features delos frames
     % pasados
     for i = 1:vSetKeyFrames.NumViews
         indexPairs = matchFeatures(binaryFeatures(vSetKeyFrames.Views.Features{i,1}), currFeatures, 'MaxRatio', 0.7);
@@ -601,8 +647,10 @@ disp('Step 4 - Check loop closure... DONE')
 
 
 %% PLOTS FINAL
-plot_resultados(vSetKeyFrames, mapPointSet)
-plot_resultados(vSetKeyFrames_LoopClosure_Opt, mapPoints_LoopClosure_Opt)
+sufix = 'SinLC';
+plot_resultados(vSetKeyFrames, mapPointSet, pathOutputs, sufix)
+sufix = 'ConLC';
+plot_resultados(vSetKeyFrames_LoopClosure_Opt, mapPoints_LoopClosure_Opt, pathOutputs, sufix)
 
 figure;
 plotTrayectoryXYZ(vSetKeyFrames)
