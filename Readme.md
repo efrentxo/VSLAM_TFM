@@ -1,4 +1,5 @@
-Scripts to apply VSLAM in the images recorded by Crazyflie 2.0 comercial drone using AI-deck
+Scripts to apply VSLAM in the images recorded by Crazyflie 2.0 comercial drone using AI-deck camera.   
+
 Reposotory content:
 - Calibration images
 - Calibration parameters
