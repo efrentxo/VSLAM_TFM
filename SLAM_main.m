@@ -408,7 +408,7 @@ if Modo == 1
         
         % second part
         % Add the new key frame 
-        [mapPointSet, vSetKeyFrames] = helperAddNewKeyFrame(mapPointSet, vSetKeyFrames, ...
+        [mapPointSet, vSetKeyFrames] = AddNewKeyFrame(mapPointSet, vSetKeyFrames, ...
             currPose, currFeatures, currPoints, mapPointsIdx, featureIdx, localKeyFrameIds);
     
         % Remove outlier map points that are observed in fewer than 3 key frames
