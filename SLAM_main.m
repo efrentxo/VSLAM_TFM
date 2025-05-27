@@ -8,12 +8,11 @@ cd(file_path);
 % Modo creacion modelo o localizacion
 % 1: creacion modelo
 % 2: localizacion
-Modo = 2;
+Modo = 1;
 
 % Mapa 3d para localizacion
 Modelo_path = '/home/efren/Escritorio/TFM/Mapa_01052025.mat';
 Imagenes_localziar = '/home/efren/Escritorio/TFM/datos/Crazyflie_toma4/Localizacion/';
-load(Modelo_path)
 
 % Imagenes para creacion de modelo
 % imageFolder   = '/home/efren/Escritorio/TFM/datos/Crazyflie_test/';
@@ -45,7 +44,7 @@ numPoints   = 500;
 
 %
 %% Cargar coeficientes de calibracion de la camara
-load('/home/efren/Escritorio/TFM/Calibrar Crazyflie/CrazyFlie_CameraCalibration06022025_3coeff.mat')
+load('/home/efren/Escritorio/TFM/Calibrar_camara_Crazyflie/CrazyFlie_CameraCalibration06022025_3coeff.mat')
 % load('/home/efren/PycharmProjects/TFM/Calibrar/CameraCalibration_3coeff_movil.mat');
 % cameraParams_3coeff = cameraParams_movil;
 % cameraParams = cameraParams_3coeff;
@@ -152,22 +151,7 @@ if Modo == 1
     %     showMatchedFeatures(firstI , currI_corr{currFrameIdx-1} , preMatchedPoints, currMatchedPoints, 'montage');
     %     title(['Matches - ',num2str(currMatchedPoints.Count), ' points']);
     
-    %     % Compute homography and evaluate reconstruction
-    %     [tformH, scoreH, inliersIdxH] = helperComputeHomography(preMatchedPoints, currMatchedPoints);
-    % 
-    %     % Compute fundamental matrix and evaluate reconstruction
-    %     [tformF, scoreF, inliersIdxF] = helperComputeFundamentalMatrix(preMatchedPoints, currMatchedPoints, intrinsics);
-    % 
-    %     % Select the model based on a heuristic
-    %     ratio = scoreH/(scoreH + scoreF);
-    %     ratioThreshold = 0.45;
-    %     if ratio > ratioThreshold
-    %         inlierTformIdx = inliersIdxH;
-    %         tform          = tformH;
-    %     else
-    %         inlierTformIdx = inliersIdxF;
-    %         tform          = tformF;
-    %     end
+        % NOTA:ORB-SLAM calcula homography y Fundamental matrix y evalua cual es mejor para inicializar
     
         % Obtener Essential matrix aplicando RANSAC
         clear inliersIdx
@@ -383,7 +367,7 @@ if Modo == 1
     
     
         % Track the last key frame
-        [currPose, mapPointsIdx, featureIdx] = helperTrackLastKeyFrame(...
+        [currPose, mapPointsIdx, featureIdx] = TrackLastKeyFrame(...
         mapPointSet, vSetKeyFrames.Views, currFeatures, currPoints, lastKeyFrameId, intrinsics, scaleFactor);
     
         if isempty(mapPointsIdx) || length(mapPointsIdx)< 6
@@ -408,7 +392,7 @@ if Modo == 1
         numSkipFrames     = 20;
         numPointsKeyFrame = 90;
         [localKeyFrameIds, currPose, mapPointsIdx, featureIdx, isKeyFrame] = ...
-            helperTrackLocalMap(mapPointSet, vSetKeyFrames, mapPointsIdx, ...
+            TrackLocalMap(mapPointSet, vSetKeyFrames, mapPointsIdx, ...
             featureIdx, currPose, currFeatures, currPoints, intrinsics, scaleFactor, numLevels, ...
             isLastFrameKeyFrame, lastKeyFrameIdx, currFrameIdx, numSkipFrames, numPointsKeyFrame);
     
@@ -436,7 +420,7 @@ if Modo == 1
         % Create new map points by triangulation
         minNumMatches = 10;
         minParallax   = 3;
-        [mapPointSet, vSetKeyFrames, newPointIdx] = helperCreateNewMapPoints(mapPointSet, vSetKeyFrames, ...
+        [mapPointSet, vSetKeyFrames, newPointIdx] = CreateNewMapPoints(mapPointSet, vSetKeyFrames, ...
             currKeyFrameId, intrinsics, scaleFactor, minNumMatches, minParallax);
     
         % Local bundle adjustment
@@ -648,7 +632,7 @@ if Modo == 1
             vSetKeyFrames_LoopClosure_Opt = optimizePoses(vSetKeyFrames_LoopClosure, minNumMatches, Tolerance=1e-16);
         
             % Update map points after optimizing the poses
-            mapPoints_LoopClosure_Opt = helperUpdateGlobalMap(mapPoints_LoopClosure, vSetKeyFrames_LoopClosure, vSetKeyFrames_LoopClosure_Opt);
+            mapPoints_LoopClosure_Opt = UpdateGlobalMap(mapPoints_LoopClosure, vSetKeyFrames_LoopClosure, vSetKeyFrames_LoopClosure_Opt);
         
         end    
     
